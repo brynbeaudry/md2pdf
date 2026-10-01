@@ -1,0 +1,122 @@
+#!/usr/bin/env bash
+#
+# cad-render — render an OpenSCAD model to a blueprint image set + STL, and
+#              capture the cut-list / metadata echoes for the plan.
+#
+# Usage:
+#   cad-render <project-dir | model.scad>
+#
+# Produces, in <project>/out/:
+#   view-iso.png    perspective 3D render (the "hero" image)
+#   view-plan.png   top / plan view        (orthographic)
+#   view-front.png  front elevation        (orthographic, door side)
+#   view-side.png   side elevation         (orthographic)
+#   model.stl       3D mesh for import into a CAD program (best-effort)
+#   capture.txt     raw ECHO output (CUTLIST / META / NOTE / DIM lines)
+#   cutlist.md/.json, meta.json   parsed by cad-cutlist.py
+#
+# The cut list and metadata come from echoes emitted by lib/lumber.scad, so they
+# always match the rendered geometry. See README.md.
+
+set -euo pipefail
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# ── locate the openscad binary (PATH, else the app bundle) ──────────────────
+OPENSCAD=""
+if command -v openscad &>/dev/null; then
+  OPENSCAD="openscad"
+elif [[ -x "/Applications/OpenSCAD.app/Contents/MacOS/OpenSCAD" ]]; then
+  OPENSCAD="/Applications/OpenSCAD.app/Contents/MacOS/OpenSCAD"
+else
+  echo "Error: openscad not found. Install with: brew install --cask openscad@snapshot" >&2
+  exit 1
+fi
+
+# ── resolve the .scad model ─────────────────────────────────────────────────
+ARG="${1:?Usage: cad-render <project-dir | model.scad>}"
+if [[ -d "$ARG" ]]; then
+  PROJ_DIR="$(cd "$ARG" && pwd)"
+  # first .scad that is not a helper (leading underscore) and not the library
+  SCAD="$(find "$PROJ_DIR" -maxdepth 1 -name '*.scad' ! -name '_*' | sort | head -1)"
+  [[ -z "$SCAD" ]] && { echo "Error: no .scad file in $PROJ_DIR" >&2; exit 1; }
+else
+  SCAD="$(cd "$(dirname "$ARG")" && pwd)/$(basename "$ARG")"
+  PROJ_DIR="$(dirname "$SCAD")"
+fi
+BASE="$(basename "${SCAD%.scad}")"
+OUT="$PROJ_DIR/out"
+mkdir -p "$OUT"
+
+echo "  Model:  $SCAD"
+echo "  Output: $OUT"
+
+COMMON=(--colorscheme=Tomorrow --autocenter --viewall)
+ISO_SIZE=1600,1200
+ORTHO_SIZE=1500,1100
+
+# ── render views ────────────────────────────────────────────────────────────
+# Capture stderr of the first (iso) render — that's where the echoes are.
+echo "  ⎿ rendering iso…"
+"$OPENSCAD" -o "$OUT/view-iso.png" --imgsize=$ISO_SIZE --projection=perspective \
+  --view=edges "${COMMON[@]}" --camera=0,0,0,55,0,25,0 "$SCAD" 2> "$OUT/capture.txt"
+
+echo "  ⎿ rendering plan…"
+# -D PLAN_VIEW=true lets a model hide its roof/cladding so the top view reads as
+# a framing plan. Harmless for models that don't define the variable.
+"$OPENSCAD" -o "$OUT/view-plan.png" --imgsize=$ORTHO_SIZE --projection=ortho \
+  --view=edges "${COMMON[@]}" -D PLAN_VIEW=true --camera=0,0,0,0,0,0,0 "$SCAD" 2>/dev/null
+
+echo "  ⎿ rendering front elevation…"
+"$OPENSCAD" -o "$OUT/view-front.png" --imgsize=$ORTHO_SIZE --projection=ortho \
+  --view=edges "${COMMON[@]}" --camera=0,0,0,90,0,0,0 "$SCAD" 2>/dev/null
+
+echo "  ⎿ rendering side elevation…"
+"$OPENSCAD" -o "$OUT/view-side.png" --imgsize=$ORTHO_SIZE --projection=ortho \
+  --view=edges "${COMMON[@]}" --camera=0,0,0,90,0,90,0 "$SCAD" 2>/dev/null
+
+# ── export STL (best-effort; the PDF does not depend on it) ──────────────────
+# NB: send STL stderr to its own log — appending it to capture.txt would emit
+# the echoes a second time and double every quantity in the cut list.
+echo "  ⎿ exporting STL…"
+if "$OPENSCAD" -o "$OUT/$BASE.stl" "$SCAD" 2>"$OUT/stl.log"; then
+  echo "     ✓ $OUT/$BASE.stl"
+else
+  echo "     ⚠ STL export failed (geometry not manifold?) — continuing; views + cut list are unaffected." >&2
+fi
+
+# ── parse echoes into cut list + metadata ────────────────────────────────────
+python3 "$HERE/cad-cutlist.py" "$OUT/capture.txt" "$OUT"
+
+# ── staged step renders (LEGO-style build instructions) ──────────────────────
+# If the model declares stage()s + plan_bounds(), render one isometric per step
+# with a fixed camera (build grows in place; prior parts ghosted, new in colour).
+rm -f "$OUT"/step-*.png
+STAGE_INFO="$(python3 - "$OUT/meta.json" <<'PY'
+import json, sys
+try:
+    m = json.load(open(sys.argv[1]))
+except Exception:
+    m = {}
+b = m.get("bounds")
+print(",".join(str(x) for x in b) if b else "")
+print(" ".join(str(s["n"]) for s in (m.get("stages") or [])))
+PY
+)"
+CAM="$(printf '%s\n' "$STAGE_INFO" | sed -n 1p)"
+STAGE_NS="$(printf '%s\n' "$STAGE_INFO" | sed -n 2p)"
+if [[ -n "$CAM" && -n "$STAGE_NS" ]]; then
+  IFS=',' read -r CX CY CZ DIST <<< "$CAM"
+  echo "  ⎿ rendering $(echo "$STAGE_NS" | wc -w | tr -d ' ') build steps…"
+  for n in $STAGE_NS; do
+    # in-place: this step's parts seated in the build so far (prior ghosted), fixed camera
+    "$OPENSCAD" -o "$OUT/step-$n.png" --imgsize=1400,1000 --projection=perspective \
+      --view=edges --colorscheme=Tomorrow -D SHOW_STAGE="$n" \
+      --camera="$CX,$CY,$CZ,55,0,25,$DIST" "$SCAD" 2>/dev/null
+    # exploded: just this section, blown apart so every piece is visible, auto-framed
+    "$OPENSCAD" -o "$OUT/step-$n-x.png" --imgsize=1400,1000 --projection=perspective \
+      --view=edges --colorscheme=Tomorrow --autocenter --viewall \
+      -D SHOW_STAGE="$n" -D XPLODE=22 --camera=0,0,0,55,0,25,0 "$SCAD" 2>/dev/null
+  done
+fi
+
+echo "  ✓ render complete."

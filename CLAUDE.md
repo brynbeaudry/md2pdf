@@ -36,6 +36,27 @@ Never report a document as done from the exit code alone.
 - For a deck, the page count should be the number of `##` sections plus one (the
   title card). More means a slide overflowed — cut content rather than shrinking it.
 
+## Build plans for physical things (`cad/`)
+
+When asked to **design or build something** (shed, outhouse, bench, planter,
+sawhorse, shelf, lean-to — anything made from lumber and sheet goods), produce a
+LEGO-style PDF build plan with this repo's `cad/` pipeline rather than writing a
+document by hand:
+
+- **Read `~/scripts/md2pdf/cad/README.md` first** — its "Agent runbook" is the
+  canonical procedure and its API section is the modelling contract.
+- Work inside `~/scripts/md2pdf/cad/`: copy `templates/SKELETON.scad` to
+  `projects/<kebab-name>/<kebab-name>.scad`, fill in the `TODO`s, and use
+  `projects/outhouse-deluxe/outhouse-deluxe.scad` as the full reference.
+- One physical piece = one `board()`/`sheet()` call; the cut list and cost come
+  from the geometry. Units are inches; X width, Y depth (front at Y=0), Z up.
+- `bin/cad-build projects/<name>` renders the views and builds the PDF via md2pdf.
+- **Verify by Reading** the PNGs in `out/` and the PDF, and grep `out/cutlist.md`
+  for `| -` (negative lengths) before calling it done.
+
+For a single 3D illustration inside an ordinary document, use an
+` ```openscad ` block instead (see `AUTHORING.md` §2.7).
+
 ## Changing md2pdf itself
 
 When the renderer's behaviour changes, update `README.md` and `AUTHORING.md` in the

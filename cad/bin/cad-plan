@@ -1,0 +1,156 @@
+#!/usr/bin/env python3
+"""cad-plan — assemble rendered views + cut list + notes into a PDF build plan.
+
+Usage:
+    cad-plan <project-dir> [--open] [--dark]
+
+Reads <project>/out/ (produced by cad-render): meta.json, cutlist.md, and the
+view-*.png images. Writes <project>/out/<project>-plan.md with the images
+base64-embedded (so they survive md2pdf's temp-dir copy), then runs md2pdf to
+produce <project>/out/<project>-plan.pdf.
+
+An optional <project>/notes.md is appended verbatim under "Assembly Notes".
+"""
+import base64
+import json
+import os
+import shutil
+import subprocess
+import sys
+from datetime import date
+
+VIEWS = [  # (filename, caption)
+    ("view-iso.png",   "Isometric view"),
+    ("view-plan.png",  "Plan (top) view"),
+    ("view-front.png", "Front elevation (door side)"),
+    ("view-side.png",  "Side elevation"),
+]
+
+
+def img_block(path, caption):
+    if not os.path.isfile(path):
+        return f"_({caption}: image not found — run cad-render first)_\n"
+    b64 = base64.b64encode(open(path, "rb").read()).decode()
+    return (f'<div style="text-align:center; margin:18px 0; page-break-inside:avoid;">'
+            f'<img src="data:image/png;base64,{b64}" style="max-width:100%; '
+            f'border:1px solid #ddd; border-radius:6px;"><br>'
+            f'<em style="color:#666; font-size:12px;">{caption}</em></div>\n')
+
+
+def legend_html(legend):
+    if not legend:
+        return ""
+    chips = "".join(
+        f'<span style="display:inline-flex;align-items:center;gap:6px;margin:3px 14px 3px 0;">'
+        f'<span style="width:15px;height:15px;background:{e["color"]};border:1px solid #999;'
+        f'border-radius:2px;display:inline-block;"></span>{e["label"]}</span>'
+        for e in legend)
+    return ("**Colour key** — pieces in the 3D and step views are coloured by type:\n\n"
+            f'<div style="display:flex;flex-wrap:wrap;font-size:13px;margin:6px 0;">{chips}</div>\n')
+
+
+def find_md2pdf():
+    # This repo's own md2pdf first (cad/bin/../../md2pdf), so a fresh clone works
+    # without installing. Then ~/.local/bin before PATH: md-to-pdf's npm package
+    # also installs an `md2pdf` alias that would win a PATH lookup and reject our flags.
+    here = os.path.dirname(os.path.abspath(__file__))
+    for cand in (os.path.join(here, "..", "..", "md2pdf"),
+                 os.path.expanduser("~/.local/bin/md2pdf"), "md2pdf"):
+        p = shutil.which(cand) if os.path.basename(cand) == cand else (cand if os.path.isfile(cand) else None)
+        if p:
+            return p
+    sys.exit("Error: md2pdf not found in this repo, at ~/.local/bin/md2pdf, or on PATH")
+
+
+def main():
+    args = sys.argv[1:]
+    if not args:
+        sys.exit("usage: cad-plan <project-dir> [--open] [--dark]")
+    open_after = "--open" in args
+    dark = "--dark" in args
+    proj = os.path.abspath([a for a in args if not a.startswith("--")][0])
+    out = os.path.join(proj, "out")
+    name = os.path.basename(proj.rstrip("/"))
+
+    meta = json.load(open(os.path.join(out, "meta.json"))) if os.path.isfile(os.path.join(out, "meta.json")) else {}
+    cutlist = open(os.path.join(out, "cutlist.md")).read() if os.path.isfile(os.path.join(out, "cutlist.md")) else "_No cut list found._"
+
+    title = meta.get("title", name)
+    subtitle = meta.get("subtitle", "")
+    units = meta.get("units", "inches")
+    material = meta.get("material", "")
+
+    md = [f"# {title}\n"]
+    if subtitle:
+        md.append(f"**{subtitle}**\n")
+    meta_bits = [f"Units: **{units}**", f"Generated: {date.today().isoformat()}"]
+    if material:
+        meta_bits.insert(0, f"Material: **{material}**")
+    md.append(" · ".join(meta_bits) + "\n")
+
+    if meta.get("dims"):
+        md += ["## Key Dimensions\n", "| Dimension | Value |", "|:----------|:------|"]
+        md += [f"| {lbl} | {val} |" for lbl, val in meta["dims"]]
+        md.append("")
+
+    md.append("## 3D View\n")
+    md.append(img_block(os.path.join(out, VIEWS[0][0]), VIEWS[0][1]))
+    md.append(legend_html(meta.get("legend")))
+
+    md.append("## Plan & Elevations\n")
+    for fn, cap in VIEWS[1:]:
+        md.append(img_block(os.path.join(out, fn), cap))
+
+    if meta.get("steps"):
+        md.append("## Assembly Sequence\n")
+        md.append("_Build in this order. Each step references pieces in the cut list below._\n")
+        for i, step in enumerate(meta["steps"], 1):
+            md.append(f"{i}. {step}")
+        md.append("")
+
+    if meta.get("stages"):
+        md.append("## Build Instructions\n")
+        md.append("_Step by step. Each render adds the parts shown in **wood colour**; "
+                  "parts already built are ghosted. The list under each step is exactly "
+                  "what you cut and fasten for that step._\n")
+        for st in meta["stages"]:
+            n, title = st["n"], st["title"]
+            md.append(f"### Step {n} — {title}\n")
+            md.append(img_block(os.path.join(out, f"step-{n}.png"), f"Step {n}: in the build so far"))
+            md.append(img_block(os.path.join(out, f"step-{n}-x.png"), f"Step {n}: parts exploded (every piece visible)"))
+            md.append("**Parts added this step:**\n")
+            md.append(st.get("parts_md", ""))
+
+    md.append("## Cut List\n")
+    md.append("_Every piece below corresponds to exactly one board in the 3D model. "
+              "Add ~10% to linear/sheet totals for waste and bad cuts._\n")
+    md.append(cutlist)
+
+    notes_md = os.path.join(proj, "notes.md")
+    if meta.get("notes") or os.path.isfile(notes_md):
+        md.append("## Assembly Notes\n")
+        for n in meta.get("notes", []):
+            md.append(f"- {n}")
+        md.append("")
+        if os.path.isfile(notes_md):
+            md.append(open(notes_md).read())
+
+    md.append("\n---\n")
+    md.append(f"<small>Generated by cad-tools from `{name}.scad`. "
+              f"Edit the .scad and re-run <code>cad-build</code> to regenerate.</small>\n")
+
+    plan_md = os.path.join(out, f"{name}-plan.md")
+    open(plan_md, "w", encoding="utf-8").write("\n".join(md))
+
+    cmd = [find_md2pdf(), plan_md]
+    if dark:
+        cmd.append("--dark")
+    if open_after:
+        cmd.append("--open")
+    print(f"  ⎿ building PDF via md2pdf…")
+    subprocess.run(cmd, check=True)
+    print(f"  ✓ {out}/{name}-plan.pdf")
+
+
+if __name__ == "__main__":
+    main()

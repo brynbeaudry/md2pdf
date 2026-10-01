@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+#
+# cad-open — open a model in the OpenSCAD GUI for manual tweaking.
+#            OpenSCAD live-reloads the file, so you can edit the .scad in your
+#            editor (or via prompt) and watch the 3D preview update.
+#
+# Usage:
+#   cad-open <project-dir | model.scad>
+
+set -euo pipefail
+ARG="${1:?Usage: cad-open <project-dir | model.scad>}"
+
+if [[ -d "$ARG" ]]; then
+  SCAD="$(find "$(cd "$ARG" && pwd)" -maxdepth 1 -name '*.scad' ! -name '_*' | sort | head -1)"
+else
+  SCAD="$ARG"
+fi
+[[ -z "${SCAD:-}" || ! -f "$SCAD" ]] && { echo "Error: no .scad found for '$ARG'" >&2; exit 1; }
+
+# macOS: open with the OpenSCAD app; elsewhere fall back to the CLI GUI launch.
+if command -v open &>/dev/null && [[ -d /Applications/OpenSCAD.app ]]; then
+  open -a OpenSCAD "$SCAD"
+else
+  openscad "$SCAD" &
+fi
+echo "Opened in OpenSCAD: $SCAD"

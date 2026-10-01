@@ -8,6 +8,9 @@ A small Bash wrapper around the `md-to-pdf` npm package that adds:
   STL/3MF mesh) rendered to one or more views (via `openscad`).
 - **Local images that just work** — relative `![](fig.png)` and `<img src>` paths
   are resolved against the source document and embedded.
+- **`cad/` — woodworking build plans**: an agent turns a text prompt into a
+  parametric OpenSCAD model and a LEGO-style PDF plan (renders, staged build
+  steps, cut list, cost estimate). See [`cad/README.md`](cad/README.md).
 - A **watchdog** around `md-to-pdf`, which intermittently wedges on its browser
   launch: detected, killed and retried automatically.
 - A GitHub-flavoured stylesheet (light/dark), automatic Table of Contents
@@ -220,8 +223,13 @@ scripts/md2pdf/
 ├── md2pdf          # the script (executable)
 ├── install.sh      # copies md2pdf to a PATH dir + reports missing deps
 ├── AUTHORING.md    # how to write a document or deck for this renderer
-├── CLAUDE.md       # agent rules: points Claude sessions at AUTHORING.md
-└── README.md       # this file
+├── CLAUDE.md       # agent rules: points Claude sessions at AUTHORING.md + cad/
+├── README.md       # this file
+└── cad/            # build-plan generator (OpenSCAD → md2pdf); see cad/README.md
+    ├── bin/        #   cad-build, cad-render, cad-plan, cad-open, cad-cutlist.py
+    ├── lib/        #   lumber.scad (board/sheet + cut list), figures.scad
+    ├── templates/  #   SKELETON.scad — start every new plan from this
+    └── projects/   #   one folder per plan; outhouse + outhouse-deluxe examples
 ```
 
 ## License

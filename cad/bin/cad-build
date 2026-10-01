@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+#
+# cad-build — render a model AND build its PDF plan in one step.
+#
+# Usage:
+#   cad-build <project-dir | model.scad> [--open] [--dark]
+#
+# Equivalent to: cad-render <proj>  &&  cad-plan <proj> [flags]
+
+set -euo pipefail
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+ARG="${1:?Usage: cad-build <project-dir | model.scad> [--open] [--dark]}"; shift || true
+PASS=()
+for a in "$@"; do PASS+=("$a"); done
+
+# resolve project dir from the arg (dir, or the dir containing the .scad)
+if [[ -d "$ARG" ]]; then PROJ="$(cd "$ARG" && pwd)"; else PROJ="$(cd "$(dirname "$ARG")" && pwd)"; fi
+
+"$HERE/cad-render" "$ARG"
+python3 "$HERE/cad-plan" "$PROJ" "${PASS[@]+"${PASS[@]}"}"

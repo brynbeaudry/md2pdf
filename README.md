@@ -4,6 +4,12 @@ A small Bash wrapper around the `md-to-pdf` npm package that adds:
 
 - **Mermaid** diagrams rendered inline as SVG (via `mmdc`).
 - **PlantUML** diagrams via the public PlantUML server (via `curl`).
+- **3D models** — ` ```openscad ` blocks (inline OpenSCAD, a `.scad` file, or an
+  STL/3MF mesh) rendered to one or more views (via `openscad`).
+- **Local images that just work** — relative `![](fig.png)` and `<img src>` paths
+  are resolved against the source document and embedded.
+- A **watchdog** around `md-to-pdf`, which intermittently wedges on its browser
+  launch: detected, killed and retried automatically.
 - A GitHub-flavoured stylesheet (light/dark), automatic Table of Contents
   injection for docs with ≥3 headings, heading anchors, and an A4 print layout.
 
@@ -18,6 +24,12 @@ out to the tools below.
 | **md-to-pdf** | `npm install -g md-to-pdf` | Markdown → PDF (headless Chromium) |
 | **mmdc** | `npm install -g @mermaid-js/mermaid-cli` | Mermaid diagram rendering |
 | **curl** | preinstalled on macOS / most Linux | PlantUML over the public server |
+| **python3** | preinstalled on macOS / most Linux | PlantUML encoding, image embedding |
+| **openscad** *(optional)* | macOS: `brew install --cask openscad@snapshot` · Linux: your package manager | ` ```openscad ` 3D blocks |
+
+On macOS use the **snapshot** (nightly) cask: the stable `openscad` cask is years
+old and is killed by Gatekeeper on recent macOS. Without OpenSCAD, 3D blocks are
+left as code listings and everything else works.
 
 Built and used on macOS (Darwin). Should work on Linux with the same deps. On
 Windows, run under WSL.
@@ -76,6 +88,44 @@ write your own agenda instead, give the document a `##` section headed `Overview
 `Contents`, `In this deck`, `On the agenda`, `What's covered`, or `How to read` — the renderer
 detects it and injects nothing. `--dark` composes with it.
 
+### 3D models
+
+A fenced block tagged `openscad` is rendered with OpenSCAD and embedded as images.
+Options go after the tag, space-separated:
+
+| Option | Meaning | Default |
+|---|---|---|
+| `view=` | `iso` (perspective), `top`, `front`, `side`, `back`, `left` — or a comma list shown side by side | `iso` |
+| `file=` | render a `.scad` file or a mesh (`.stl` `.3mf` `.obj` `.off` `.amf`), relative to the document; the block body is ignored | inline body |
+| `size=` | pixels per view, `WxH` | `1600x1200` |
+| `define=NAME=VALUE` | passed to the model as `-D NAME=VALUE`; repeatable | — |
+
+    ```openscad view=iso,front,side
+    use <parts/lib.scad>          // resolved against the document's folder
+    cube([30, 20, 4]);
+    translate([20, 10, 4]) import("parts/bracket.stl");
+    ```
+
+    ```openscad file=models/box.scad define=W=40
+    ```
+
+Inline source resolves `use`/`include` against the document's folder, and relative
+`import()`/`surface()` paths are rewritten to it, so a document and its model files
+can live side by side. `--dark` switches the render colour scheme too. A model
+that fails shows a visible warning box with OpenSCAD's error, plus the source.
+
+For full multi-step build plans (staged LEGO-style renders, exploded views, cut
+lists) see the separate `cad-tools` project, which generates Markdown for md2pdf.
+
+### Local images
+
+Relative image paths resolve against the source document, not the temp copy
+md-to-pdf renders, and are embedded as data URIs — so `![](figs/a.png)` works
+and the PDF is self-contained. Remote URLs and fenced code are left alone; a
+missing file prints `⚠ image not found` and renders as a broken image.
+
+### Diagram blocks
+
 Diagram blocks are detected automatically inside fenced code:
 
     ```mermaid
@@ -97,15 +147,29 @@ For each input file:
    after the H1's framing paragraph. In `--present` this becomes an `Overview`
    agenda card, suppressed when the document already has an overview section.
 2. **Pre-process diagram fences**: render Mermaid blocks with `mmdc` and
-   PlantUML blocks via the public server (`curl`), each to an SVG, then embed
-   them in the Markdown as base64-data `<img>` tags inside a `.diagram-container`.
-3. **Convert** the resulting Markdown through `md-to-pdf` with a bundled
-   GitHub-flavoured stylesheet, and A4 portrait or 16:9 landscape print options.
+   PlantUML blocks via the public server (`curl`), each to an SVG, and
+   OpenSCAD blocks with `openscad` to PNG views, then embed them in the Markdown
+   as base64-data `<img>` tags inside a `.diagram-container`.
+3. **Embed local images** referenced by relative or absolute path.
+4. **Convert** the resulting Markdown through `md-to-pdf` with a bundled
+   GitHub-flavoured stylesheet, and A4 portrait or 16:9 landscape print options,
+   under a watchdog (below).
 
 A failed Mermaid render leaves a visible warning block in the PDF (and prints to
 stderr) instead of silently falling back to a code listing.
 
 ## Troubleshooting
+
+### `⚠ md-to-pdf wedged (no browser after 20s) — attempt 1/3`
+
+md-to-pdf intermittently hangs while launching Puppeteer's Chromium: 0% CPU, no
+browser process, forever — sometimes several runs in a row. md2pdf watches for
+it: a run that has started no browser after `MD2PDF_LAUNCH_TIMEOUT` seconds
+(default 20; a healthy one starts within a second) is killed and retried, up to
+3 attempts. `MD2PDF_TIMEOUT` (default 90) is a backstop for a render that hangs
+after launch — raise it for very large documents. md-to-pdf is also given an
+empty stdin, because it reads Markdown from a piped stdin and would otherwise
+wait on one that never closes (e.g. when run from an agent or CI).
 
 ### `ArgError: unknown or unexpected option: -o` (or `--open`, `--dark`, …)
 
@@ -156,6 +220,7 @@ scripts/md2pdf/
 ├── md2pdf          # the script (executable)
 ├── install.sh      # copies md2pdf to a PATH dir + reports missing deps
 ├── AUTHORING.md    # how to write a document or deck for this renderer
+├── CLAUDE.md       # agent rules: points Claude sessions at AUTHORING.md
 └── README.md       # this file
 ```
 

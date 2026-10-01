@@ -22,7 +22,7 @@ Everything here describes what the renderer actually does. When the tool changes
 
 Lead a section with a Mermaid diagram, **before** the prose, then let the prose interpret it. Add one only when it aids understanding of structure, flow, or relationships — never one that restates the text.
 
-Pick by purpose: `flowchart` (architecture, data flow, lifecycle — the default), `erDiagram` (data models), `sequenceDiagram` (interaction over time), `stateDiagram` (lifecycles), `gantt` (schedules).
+Pick by purpose: `flowchart` (architecture, data flow, lifecycle — the default), `erDiagram` (data models), `sequenceDiagram` (interaction over time), `stateDiagram` (lifecycles), `gantt` (schedules), and ` ```openscad ` for physical objects ([§2.7](#27-3d-models)).
 
 ### 2.1 Conventions
 
@@ -90,6 +90,16 @@ Two shapes carry more than a row of boxes and are routinely missed:
 
 When one diagram builds on another, keep the **same topology and node shapes** and change only what the new slide adds — the reader should see the specialisation happen. Say so in the prose ("the same picture, one level in"). This is far stronger than two unrelated diagrams of the same subject.
 
+### 2.7 3D models
+
+When the subject is a physical object — a part, an enclosure, a build — show it with an ` ```openscad ` block rather than describing its shape in prose. The block is rendered by OpenSCAD and embedded as images.
+
+- **Pick views by purpose.** `view=iso` (the default) is the hero shot that shows what the thing *is*. Add orthographic views when dimensions matter: `view=iso,front,side` puts three side by side with captions.
+- **Keep the model next to the document.** Large models belong in a `.scad` file referenced with `file=models/x.scad`; meshes from elsewhere with `file=part.stl`. Inline source is for small illustrative shapes. `use`/`include` and relative `import()` paths resolve against the document's folder.
+- **Show variants with `define=`** rather than copying the model: `file=box.scad define=W=40` next to `define=W=60` is the 3D equivalent of §2.6 — same model, one parameter changed.
+- **Put the dimensions in the prose or a table beneath it.** A render shows proportion, not measurement.
+- **One model per section**, the same rule as diagrams. On a slide a single view is capped at 76mm high; three views side by side read better than one large one.
+
 ## 3. Tables and prose
 
 - **Use tables for enumerable facts**: ledgers, per-item matrices, at-a-glance summaries, glossaries, status indexes. Keep explanation in the surrounding prose, not crammed into cells.
@@ -99,6 +109,7 @@ When one diagram builds on another, keep the **same topology and node shapes** a
 - **Distinguish measured from inferred.** Mark inferences (`[projected]`, `[infer]`, "best guess") rather than presenting them as fact.
 - **Date every measurement**, or state the method. A figure with neither will be quoted as current long after it stops being true — by a person, and much more readily by an agent that has no way to tell.
 - **Anchor claims to sources** (`file.py:line`, `§4.2`).
+- **Images by relative path** (`![Wiring](figs/wiring.png)`) — they resolve against the document and are embedded, so the PDF is self-contained. Keep figures in a folder beside the document.
 
 ## 4. Writing for `--present`
 
@@ -139,6 +150,6 @@ Plain and concrete. A deck is read at a glance and often from a distance.
 ## 5. Compatibility
 
 - **GitHub-flavoured Markdown only.** Mermaid in ` ```mermaid ` fences, other code fenced with a language tag.
-- **No raw HTML in the body.** Keep HTML (`<br/>`, `<b>`) inside Mermaid labels, where it renders. The one exception is the `<div class="agenda">` the renderer injects itself.
+- **No raw HTML in the body.** Keep HTML (`<br/>`, `<b>`) inside Mermaid labels, where it renders. The exceptions are what the renderer injects itself: the `<div class="agenda">` and the `.diagram-container` blocks for diagrams and 3D views.
 - **Self-contained** — no reliance on external CSS or JS.
 - **Themes compose with the output shape**: `--dark` works with `--present`.

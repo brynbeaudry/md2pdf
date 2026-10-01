@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 #
 # md2pdf — Convert Markdown files to PDF using headless Chromium (via md-to-pdf).
-#           Renders Mermaid diagrams (via mmdc) and PlantUML diagrams (via public server).
+#           Renders Mermaid diagrams (via mmdc), PlantUML diagrams (via public server)
+#           and OpenSCAD / STL 3D models (via openscad), and embeds local images.
 #           GitHub-flavored rendering, no dialogs, no browser windows.
 #
 # Usage:
@@ -46,7 +47,9 @@ while [[ $# -gt 0 ]]; do
 
   md2pdf — Convert Markdown to PDF (headless Chromium, no dialogs)
 
-  Renders Mermaid and PlantUML diagrams inline as SVG images.
+  Renders Mermaid and PlantUML diagrams inline as SVG images, renders
+  ```openscad blocks (inline source, or file=model.scad / file=part.stl) as
+  3D views, and embeds local images so relative paths just work.
 
   Usage:
     md2pdf <file.md> [file2.md ...] [options]
@@ -68,6 +71,15 @@ while [[ $# -gt 0 ]]; do
     md-to-pdf   — npm install -g md-to-pdf
     mmdc        — npm install -g @mermaid-js/mermaid-cli  (for Mermaid diagrams)
     curl        — (built-in on macOS, for PlantUML via public server)
+    python3     — (built-in on macOS, for PlantUML encoding + image embedding)
+    openscad    — optional, for ```openscad 3D blocks
+                  (macOS: brew install --cask openscad@snapshot)
+
+  Environment:
+    MD2PDF_LAUNCH_TIMEOUT=<s>  md-to-pdf counts as wedged if no browser has
+                               started after this long (default 20)
+    MD2PDF_TIMEOUT=<s>         Backstop: kill a render still running after
+                               this long (default 90). Up to 3 attempts/file.
 
 HELP
       exit 0
@@ -103,6 +115,18 @@ HAS_CURL=false
 if command -v curl &>/dev/null; then
   HAS_CURL=true
 fi
+
+# OpenSCAD is optional (3D blocks only). The macOS cask installs the app bundle
+# without always linking a CLI, so fall back to the binary inside it.
+OPENSCAD=""
+if command -v openscad &>/dev/null; then
+  OPENSCAD="openscad"
+elif [[ -x "/Applications/OpenSCAD.app/Contents/MacOS/OpenSCAD" ]]; then
+  OPENSCAD="/Applications/OpenSCAD.app/Contents/MacOS/OpenSCAD"
+fi
+
+MD_TO_PDF_TIMEOUT="${MD2PDF_TIMEOUT:-90}"
+MD_TO_PDF_LAUNCH_TIMEOUT="${MD2PDF_LAUNCH_TIMEOUT:-20}"
 
 # ── Theme CSS ─────────────────────────────────────────────────────────────────
 read -r -d '' LIGHT_CSS << 'ENDCSS' || true
@@ -329,9 +353,11 @@ ENDCSS
 if [[ "$THEME" == "dark" ]]; then
   CSS="$DARK_CSS"
   MERMAID_THEME="dark"
+  OPENSCAD_SCHEME="Tomorrow Night"
 else
   CSS="$LIGHT_CSS"
   MERMAID_THEME="default"
+  OPENSCAD_SCHEME="Tomorrow"
 fi
 
 if [[ "$PRESENT" == true ]]; then
@@ -578,15 +604,216 @@ inject_toc() {
   rm -f "$toc_tmp"
 }
 
+# ── Render an ```openscad block to one or more PNG views ─────────────────────
+# Fence options, space-separated after the language tag:
+#   view=iso|top|front|side|back|left   one, or a comma list shown side by side
+#                                       (default iso — the perspective hero shot)
+#   file=path       render a .scad file, or a mesh (.stl .3mf .obj .off .amf),
+#                   relative to the document. The block body is then ignored.
+#   size=WxH        pixels per view (default 1600x1200)
+#   define=NAME=V   passed to the model as -D NAME=V (repeatable)
+# Inline source resolves `use`/`include` against the document's directory (via
+# OPENSCADPATH), and relative import()/surface() paths are rewritten to it,
+# because OpenSCAD resolves those against the .scad file — here, a temp file.
+# Prints the embedding HTML on stdout. On failure returns 1 and leaves the
+# reason in "$work_dir/model-$n.err".
+render_openscad() {
+  local opts="$1" content="$2" work_dir="$3" n="$4" doc_dir="$5"
+  local err_file="$work_dir/model-$n.err"
+  local views="iso" file="" size="1600,1200" tok
+  local defines=()
+  local toks=()
+  read -ra toks <<< "$opts"
+  for tok in ${toks[@]+"${toks[@]}"}; do
+    case "$tok" in
+      view=*|views=*) views="${tok#*=}" ;;
+      file=*)         file="${tok#*=}" ;;
+      size=*)         size="${tok#*=}"; size="${size/x/,}" ;;
+      define=*)       defines+=(-D "${tok#define=}") ;;
+      *) echo "  ⚠ 3D model $n: ignoring unknown option '$tok'" >&2 ;;
+    esac
+  done
+
+  local scad="$work_dir/model-$n.scad"
+  if [[ -n "$file" ]]; then
+    file="${file/#\~/$HOME}"
+    [[ "$file" == /* ]] || file="$doc_dir/$file"
+    if [[ ! -f "$file" ]]; then
+      echo "file not found: $file" > "$err_file"; return 1
+    fi
+    case "$(echo "${file##*.}" | tr '[:upper:]' '[:lower:]')" in
+      scad)                scad="$file" ;;
+      stl|3mf|obj|off|amf) printf 'import("%s");\n' "$file" > "$scad" ;;
+      *) echo "unsupported model type: ${file##*/}" > "$err_file"; return 1 ;;
+    esac
+  else
+    printf '%s\n' "$content" | DOC_DIR="$doc_dir" python3 -c '
+import os, re, sys
+doc = os.environ["DOC_DIR"]
+def fix(m):
+    p = m.group(2)
+    return m.group(0) if os.path.isabs(p) else m.group(1) + os.path.join(doc, p) + "\""
+sys.stdout.write(re.sub(r"((?:import|surface)\s*\(\s*(?:file\s*=\s*)?\")([^\"]+)\"", fix, sys.stdin.read()))
+' > "$scad"
+  fi
+
+  local v cam proj png b64 html="" count=0 width=""
+  local vlist=()
+  IFS=',' read -ra vlist <<< "$views"
+  case ${#vlist[@]} in
+    1) width="" ;;
+    3) width="32%" ;;
+    *) width="48%" ;;
+  esac
+  : > "$err_file"
+  for v in "${vlist[@]}"; do
+    case "$v" in
+      iso)        proj=perspective; cam="0,0,0,55,0,25,0" ;;
+      top|plan)   proj=ortho;       cam="0,0,0,0,0,0,0" ;;
+      front)      proj=ortho;       cam="0,0,0,90,0,0,0" ;;
+      side|right) proj=ortho;       cam="0,0,0,90,0,90,0" ;;
+      back)       proj=ortho;       cam="0,0,0,90,0,180,0" ;;
+      left)       proj=ortho;       cam="0,0,0,90,0,270,0" ;;
+      *) echo "unknown view '$v' (use iso, top, front, side, back, left)" > "$err_file"; return 1 ;;
+    esac
+    png="$work_dir/model-$n-$v.png"
+    OPENSCADPATH="$doc_dir${OPENSCADPATH:+:$OPENSCADPATH}" \
+      "$OPENSCAD" -o "$png" --imgsize="$size" --projection="$proj" \
+      --view=edges --colorscheme="$OPENSCAD_SCHEME" --autocenter --viewall \
+      --camera="$cam" ${defines[@]+"${defines[@]}"} "$scad" 2>>"$err_file" || true
+    if [[ ! -s "$png" ]]; then return 1; fi
+    b64=$(base64 < "$png" | tr -d '\n')
+    if [[ -n "$width" ]]; then
+      html+="<figure style=\"display:inline-block;width:${width};margin:0 0.5%;vertical-align:top;\"><img src=\"data:image/png;base64,${b64}\" alt=\"3D model, ${v} view\"><figcaption style=\"font-size:0.8em;opacity:0.7;\">${v}</figcaption></figure>"
+    else
+      # A 4:3 render at full A4 width is most of a page; cap it so the prose
+      # around it stays close. Decks have their own cap in PRESENT_CSS.
+      local cap=""; [[ "$PRESENT" == true ]] || cap=" style=\"max-height:110mm;\""
+      html+="<img src=\"data:image/png;base64,${b64}\" alt=\"3D model, ${v} view\"${cap}>"
+    fi
+    count=$((count + 1))
+  done
+  # OpenSCAD reports model errors as warnings and still writes an empty scene.
+  if grep -qE '^ERROR:' "$err_file"; then return 1; fi
+  echo "<div class=\"diagram-container\">${html}</div>"
+}
+
+# ── Embed local images as data URIs ───────────────────────────────────────────
+# md-to-pdf renders from a temp copy, so a relative ![](fig.png) would point
+# into the temp dir and come out as a broken image. Resolve local image paths
+# (Markdown and <img src>) against the source document and inline them. Remote
+# URLs, data: URIs and anything inside fenced code are left untouched.
+embed_local_images() {
+  local input_file="$1" output_file="$2" doc_dir="$3"
+  python3 - "$input_file" "$output_file" "$doc_dir" <<'PY'
+import base64, os, re, sys, urllib.parse
+src, dst, doc = sys.argv[1:4]
+MIME = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+        ".gif": "image/gif", ".svg": "image/svg+xml", ".webp": "image/webp",
+        ".bmp": "image/bmp"}
+MD_IMG = re.compile(r'(!\[[^\]]*\]\()(<[^>]+>|[^)\s]+)((?:\s+"[^"]*")?\))')
+HTML_IMG = re.compile(r'(<img\b[^>]*?\bsrc\s*=\s*)(["\'])(.*?)\2', re.I)
+missing = []
+
+def data_uri(ref):
+    ref = ref.strip("<>")
+    if ref.startswith("file://"):
+        ref = ref[7:]
+    elif re.match(r"^[a-z][a-z0-9+.-]*:", ref, re.I) or ref.startswith("#"):
+        return None
+    path = os.path.expanduser(urllib.parse.unquote(ref))
+    if not os.path.isabs(path):
+        path = os.path.join(doc, path)
+    mime = MIME.get(os.path.splitext(path)[1].lower())
+    if not mime:
+        return None
+    if not os.path.isfile(path):
+        missing.append(ref)
+        return None
+    with open(path, "rb") as f:
+        return "data:%s;base64,%s" % (mime, base64.b64encode(f.read()).decode())
+
+def md_sub(m):
+    uri = data_uri(m.group(2))
+    return m.group(0) if uri is None else m.group(1) + uri + m.group(3)
+
+def html_sub(m):
+    uri = data_uri(m.group(3))
+    return m.group(0) if uri is None else m.group(1) + m.group(2) + uri + m.group(2)
+
+out, fence = [], None
+with open(src, encoding="utf-8") as f:
+    for line in f:
+        s = line.lstrip()
+        if fence is None and (s.startswith("```") or s.startswith("~~~")):
+            fence = s[:3]
+        elif fence is not None:
+            if s.startswith(fence):
+                fence = None
+        elif "](" in line or "<img" in line:
+            line = HTML_IMG.sub(html_sub, MD_IMG.sub(md_sub, line))
+        out.append(line)
+with open(dst, "w", encoding="utf-8") as f:
+    f.writelines(out)
+for ref in missing:
+    print("  ⚠ image not found: %s" % ref, file=sys.stderr)
+PY
+}
+
+# ── Run md-to-pdf under a watchdog ────────────────────────────────────────────
+# md-to-pdf intermittently wedges on its Puppeteer browser launch: the process
+# sits at 0% CPU forever and no Chromium ever appears (it can strike several
+# runs in a row). A healthy run spawns Chromium within a second, so "no child
+# process after MD2PDF_LAUNCH_TIMEOUT seconds" identifies a wedge precisely;
+# MD2PDF_TIMEOUT is a backstop for anything that hangs after launch. macOS has
+# no timeout(1), so poll, kill the process tree, and retry. A real failure
+# (non-zero exit) is not retried.
+MD_TO_PDF_PID=""
+run_md_to_pdf() {
+  local attempt ticks timed_out launched
+  local limit=$(( MD_TO_PDF_TIMEOUT * 4 )) launch_limit=$(( MD_TO_PDF_LAUNCH_TIMEOUT * 4 ))
+  for attempt in 1 2 3; do
+    md-to-pdf "$@" </dev/null 2>/dev/null &
+    MD_TO_PDF_PID=$!
+    ticks=0; timed_out=false; launched=false
+    while kill -0 "$MD_TO_PDF_PID" 2>/dev/null; do
+      if [[ "$launched" == false ]] && pgrep -P "$MD_TO_PDF_PID" >/dev/null 2>&1; then
+        launched=true
+      fi
+      if (( ticks >= limit )) || { [[ "$launched" == false ]] && (( ticks >= launch_limit )); }; then
+        timed_out=true
+        pkill -P "$MD_TO_PDF_PID" 2>/dev/null || true
+        kill "$MD_TO_PDF_PID" 2>/dev/null || true
+        break
+      fi
+      sleep 0.25
+      ticks=$(( ticks + 1 ))
+    done
+    if wait "$MD_TO_PDF_PID" 2>/dev/null && [[ "$timed_out" == false ]]; then
+      MD_TO_PDF_PID=""; return 0
+    fi
+    MD_TO_PDF_PID=""
+    [[ "$timed_out" == true ]] || return 1
+    if [[ "$launched" == false ]]; then
+      echo "  ⚠ md-to-pdf wedged (no browser after ${MD_TO_PDF_LAUNCH_TIMEOUT}s) — attempt $attempt/3" >&2
+    else
+      echo "  ⚠ md-to-pdf still running after ${MD_TO_PDF_TIMEOUT}s — attempt $attempt/3" >&2
+    fi
+  done
+  return 1
+}
+
 # ── Pre-process: extract diagram blocks, render, replace with <img> ───────────
 preprocess_diagrams() {
   local input_file="$1"
   local output_file="$2"
   local work_dir="$3"
+  local doc_dir="$4"
 
   local diagram_count=0
   local in_block=false
   local block_type=""
+  local block_opts=""
   local block_content=""
   local line
 
@@ -597,6 +824,17 @@ preprocess_diagrams() {
     if [[ "$in_block" == false ]] && [[ "$line" =~ ^\`\`\`mermaid ]]; then
       in_block=true
       block_type="mermaid"
+      block_content=""
+      continue
+    fi
+
+    # Detect start of an OpenSCAD block. Anything after the tag is options.
+    if [[ "$in_block" == false ]] && [[ "$line" =~ ^\`\`\`(openscad|scad)([[:space:]]|$) ]]; then
+      in_block=true
+      block_type="openscad"
+      block_opts="${line#\`\`\`}"
+      block_opts="${block_opts#openscad}"
+      block_opts="${block_opts#scad}"
       block_content=""
       continue
     fi
@@ -643,6 +881,7 @@ preprocess_diagrams() {
           echo "<div class=\"diagram-container\" style=\"border-color:#f8d7da;background:#fdf2f2;\">" \
                "<strong style=\"color:#842029;\">⚠ Mermaid diagram $diagram_count failed to render</strong><br>" \
                "<code style=\"color:#842029;\">$(echo "$err_first" | sed 's/[<>&]//g' | head -c 200)</code></div>"
+          echo ""
           echo '```mermaid'
           echo "$block_content"
           echo '```'
@@ -660,14 +899,37 @@ preprocess_diagrams() {
           echo "<!-- plantuml render failed for diagram $diagram_count -->"
         fi
 
+      elif [[ "$block_type" == "openscad" ]] && [[ -n "$OPENSCAD" ]]; then
+        local model_html
+        if model_html=$(render_openscad "$block_opts" "$block_content" "$work_dir" "$diagram_count" "$doc_dir"); then
+          echo "$model_html"
+        else
+          local err_first
+          err_first=$(grep -m1 -E '^ERROR:|not found|unsupported|unknown view' "$work_dir/model-$diagram_count.err" 2>/dev/null || true)
+          [[ -n "$err_first" ]] || err_first=$(grep -m1 -v '^[[:space:]]*$' "$work_dir/model-$diagram_count.err" 2>/dev/null || echo "openscad produced no image")
+          err_first=$(echo "$err_first" | sed -E 's/ in file [^,]*model-[0-9]+\.scad/ in the inline model/')
+          echo "  ⚠ 3D model $diagram_count FAILED: $err_first" >&2
+          echo "<div class=\"diagram-container\" style=\"border-color:#f8d7da;background:#fdf2f2;\">" \
+               "<strong style=\"color:#842029;\">⚠ 3D model $diagram_count failed to render</strong><br>" \
+               "<code style=\"color:#842029;\">$(echo "$err_first" | sed 's/[<>&]//g' | head -c 200)</code></div>"
+          echo ""
+          echo '```openscad'
+          echo "$block_content"
+          echo '```'
+        fi
+
       else
         # No renderer available — keep as code block
+        if [[ "$block_type" == "openscad" ]]; then
+          echo "  ⚠ openscad not found — 3D block $diagram_count left as code (brew install --cask openscad@snapshot)" >&2
+        fi
         echo "\`\`\`${block_type}"
         echo "$block_content"
         echo '```'
       fi
 
       block_type=""
+      block_opts=""
       block_content=""
       continue
     fi
@@ -695,7 +957,8 @@ ${line}"
 WORK_ROOT="$(mktemp -d /tmp/md2pdf-XXXXXX)"
 CSS_FILE="$WORK_ROOT/style.css"
 echo "$CSS" > "$CSS_FILE"
-trap 'rm -rf "$WORK_ROOT"' EXIT
+# Also reap an in-flight md-to-pdf, so Ctrl-C doesn't leave a Chromium behind.
+trap '[[ -n "$MD_TO_PDF_PID" ]] && { pkill -P "$MD_TO_PDF_PID" 2>/dev/null; kill "$MD_TO_PDF_PID" 2>/dev/null; }; rm -rf "$WORK_ROOT"' EXIT
 
 # ── Create output dir if needed ───────────────────────────────────────────────
 if [[ -n "$OUTPUT_DIR" ]]; then
@@ -754,17 +1017,24 @@ for FILE in "${FILES[@]}"; do
   # Check if file has any diagram blocks
   MERMAID_COUNT=$(grep -c '```mermaid' "$TOCIFIED_MD" 2>/dev/null || true)
   PLANTUML_COUNT=$(grep -cE '```(plantuml|puml|uml)' "$TOCIFIED_MD" 2>/dev/null || true)
-  TOTAL_DIAGRAMS=$((MERMAID_COUNT + PLANTUML_COUNT))
+  MODEL_COUNT=$(grep -cE '^```(openscad|scad)([[:space:]]|$)' "$TOCIFIED_MD" 2>/dev/null || true)
+  TOTAL_DIAGRAMS=$((MERMAID_COUNT + PLANTUML_COUNT + MODEL_COUNT))
 
   if [[ $TOTAL_DIAGRAMS -gt 0 ]]; then
     echo "  ⎿ Rendering $TOTAL_DIAGRAMS diagram(s)..."
 
     PROCESSED_MD="$FILE_WORK/processed.md"
-    preprocess_diagrams "$TOCIFIED_MD" "$PROCESSED_MD" "$FILE_WORK"
+    preprocess_diagrams "$TOCIFIED_MD" "$PROCESSED_MD" "$FILE_WORK" "$INPUT_DIR" >/dev/null
     CONVERT_SOURCE="$PROCESSED_MD"
   else
     CONVERT_SOURCE="$TOCIFIED_MD"
   fi
+
+  # Inline local images last, so relative paths resolve against the source
+  # document rather than the temp copy md-to-pdf actually renders.
+  EMBEDDED_MD="$FILE_WORK/$BASENAME.md"
+  embed_local_images "$CONVERT_SOURCE" "$EMBEDDED_MD" "$INPUT_DIR"
+  CONVERT_SOURCE="$EMBEDDED_MD"
 
   # ── Run md-to-pdf ───────────────────────────────────────────────────────
   # md-to-pdf writes the PDF next to the source file
@@ -772,12 +1042,11 @@ for FILE in "${FILES[@]}"; do
   SOURCE_BASE="$(basename "${CONVERT_SOURCE%.md}")"
   DEFAULT_PDF="$SOURCE_DIR/$SOURCE_BASE.pdf"
 
-  if md-to-pdf "$CONVERT_SOURCE" \
+  if run_md_to_pdf "$CONVERT_SOURCE" \
     --basedir "$FILE_WORK" \
     --stylesheet "$CSS_FILE" \
     --highlight-style github \
-    --pdf-options "$PDF_OPTIONS" \
-    2>/dev/null; then
+    --pdf-options "$PDF_OPTIONS"; then
 
     # Move to final destination
     if [[ -f "$DEFAULT_PDF" ]]; then

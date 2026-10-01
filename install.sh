@@ -34,6 +34,13 @@ check npm       "comes with node — see above"
 check md-to-pdf "npm install -g md-to-pdf"
 check mmdc      "npm install -g @mermaid-js/mermaid-cli"
 check curl      "(should be preinstalled; otherwise your OS package manager)"
+check python3   "(should be preinstalled; otherwise your OS package manager)"
+
+if command -v openscad >/dev/null 2>&1 || [[ -x /Applications/OpenSCAD.app/Contents/MacOS/OpenSCAD ]]; then
+  echo "✓ found: openscad (3D blocks)"
+else
+  echo "· optional: openscad, for \`\`\`openscad 3D blocks — macOS: brew install --cask openscad@snapshot"
+fi
 
 if [[ $missing -eq 0 ]]; then
   echo "All set. Try:  md2pdf -h"

@@ -39,6 +39,8 @@ JH = lumber_dims(JOIST)[0];   // 5.5  floor frame height
 DECK_TOP = JH + DECK_T;       // top of interior floor; walls start here
 
 PLAN_VIEW = false;            // set via -D by cad-render for the plan render
+SHOW_STAGE = 0;               // set via -D per build step (use<> does not import it)
+XPLODE = 0;                   // set via -D for the exploded render
 
 /* ───── plan metadata ───── */
 plan_meta(

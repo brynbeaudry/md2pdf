@@ -117,6 +117,11 @@ end. Steps:
   Put the "front" (door/access side) at **`Y = 0`** so the front elevation shows
   it. `cad-render` renders: iso, plan (looking down Z), front elevation (along
   Y), side elevation (along X).
+- **Declare the render switches** `PLAN_VIEW = false; SHOW_STAGE = 0; XPLODE = 0;`
+  at the top of the model (the template does). `use <../../lib/lumber.scad>`
+  imports modules but **not variables**, so without the declarations any test on
+  them is silently false — OpenSCAD only warns `Ignoring unknown variable`. Grep
+  `out/capture.txt` for `WARNING` after every render.
 - **Plan view:** wrap roof/cladding in `if (!PLAN_VIEW) { ... }`. `cad-render`
   passes `-D PLAN_VIEW=true` for the plan render only, so the top view reads as a
   framing plan instead of just showing the roof. (Harmless to omit.)
@@ -126,7 +131,10 @@ end. Steps:
   member type, with a colour key in the PDF). Use these keywords so colours map:
   `stud`/`king`/`jack`/`cripple`, `plate`/`sill`, `header`, `joist`/`rim`,
   `rafter`/`ridge`, `sheathing`/`deck`/`panel`, `deck board`/`tread`, `seat`,
-  `trim`. Unmatched tags fall back to the default wood/ply colour (still fine).
+  `trim`, `stringer`, `baluster`/`rail`, `ledger`/`beam`, `post`. Unmatched tags
+  fall back to the default wood/ply colour (still fine). Matching is by substring,
+  most specific first — so **don't put `deck` in a framing tag** (`"deck joist"`
+  colours as plywood decking; say `"joist"`).
 - Identical pieces (same size + length + tag) are auto-counted as a quantity, so
   just call `board()` in a `for` loop; you don't manage counts yourself.
 - **Always include an ordered build sequence** (`plan_step()` in build order) —
@@ -157,6 +165,7 @@ use <../../lib/lumber.scad>     // path from projects/<name>/<name>.scad
 |------|-------|-------|
 | `board(size, length, tag)` | a stick of lumber along **+X** (width→+Y, thickness→+Z) | `size` like `"2x4"` |
 | `sheet(thick, w, h, tag)`  | a panel lying flat (w→+X, h→+Y, thick→+Z) | plywood/OSB |
+| `stringer(size, risers, rise, run, tt=1.5, tag)` | a **notched stair stringer**: run along +X from the bottom, rise +Z, thickness +Y | stairs; cut-list length is the stock it's cut from. Put treads on the seats: tread *i* (1..risers−1) tops out at `z = i*rise` over `x ∈ [(i−1)*run, i*run]`. A plain `board()` can't stand in — a rectangle pokes through the treads. |
 
 **Oriented helpers** (same board, laid three ways; start at origin, then `translate()`):
 | Call | Lays the board | Use for |
@@ -176,7 +185,7 @@ use <../../lib/lumber.scad>     // path from projects/<name>/<name>.scad
 
 **Helpers / data:**
 - `lumber_dims(size)` → `[width, thickness]` in inches.
-- Known sizes: `1x2 1x3 1x4 1x6 1x8 2x2 2x3 2x4 2x6 2x8 2x10 4x4 6x6`.
+- Known sizes: `1x2 1x3 1x4 1x6 1x8 2x2 2x3 2x4 2x6 2x8 2x10 2x12 4x4 6x6`.
   Unknown sizes draw as a `2x4` and emit a warning into the cut list.
 
 **Scale figures — `lib/figures.scad`:** `use <../../lib/figures.scad>` then

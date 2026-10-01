@@ -30,7 +30,7 @@ DEFAULT_PRICES = {
     "currency": "$", "waste_pct": "10",
     "1x2": "0.40", "1x3": "0.55", "1x4": "0.70", "1x6": "1.10", "1x8": "1.60",
     "2x2": "0.55", "2x3": "0.70", "2x4": "0.80", "2x6": "1.30", "2x8": "1.90",
-    "2x10": "2.60", "4x4": "2.40", "6x6": "5.50",
+    "2x10": "2.60", "2x12": "3.30", "4x4": "2.40", "6x6": "5.50",
     "0.25in ply": "28", "0.5in ply": "45", "0.75in ply": "68",
 }
 
@@ -50,6 +50,12 @@ ROLE_MAP = [
     ("plate", "Plates & sills", "#b07a3f"),
     ("seat", "Bench seat", "#9c6b42"),
     ("trim", "Door trim", "#7e8b5a"),
+    ("stringer", "Stair stringers", "#7a5c3e"),
+    ("baluster", "Guard (rails & balusters)", "#5d7d74"),
+    ("rail", "Guard (rails & balusters)", "#5d7d74"),
+    ("ledger", "Beams & ledger", "#8b4a2b"),
+    ("beam", "Beams & ledger", "#8b4a2b"),
+    ("post", "Posts", "#6e5a48"),
     ("king", "Studs", "#c8a165"),
     ("jack", "Studs", "#c8a165"),
     ("cripple", "Studs", "#c8a165"),

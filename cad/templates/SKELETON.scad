@@ -18,6 +18,14 @@ H = 18;     // TODO: overall height (Z)
 
 PT = 1.5;   // 2x lumber thickness (handy constant)
 
+/* ───── render switches — cad-render overrides these with -D per image ──────
+   `use <lumber.scad>` imports modules but NOT variables, so a model that tests
+   these must declare them itself, or they are undefined and every test on them
+   is false (OpenSCAD only warns).                                            */
+PLAN_VIEW  = false;   // true for the plan (top) render: hide roof/decking
+SHOW_STAGE = 0;       // n for build-step n's render; 0 = overview
+XPLODE     = 0;       // > 0 for the exploded-parts render
+
 /* ───── plan metadata — title block + numbered build sequence (REQUIRED) ─── */
 plan_meta(
     title    = "TODO Project Title",

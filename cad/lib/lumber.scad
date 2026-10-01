@@ -41,6 +41,10 @@ ROLE_COLORS = [
     ["header", "#a85f2b"],
     ["sill", "#b07a3f"], ["plate", "#b07a3f"],
     ["seat", "#9c6b42"], ["trim", "#7e8b5a"],
+    ["stringer", "#7a5c3e"],
+    ["baluster", "#5d7d74"], ["rail", "#5d7d74"],
+    ["ledger", "#8b4a2b"], ["beam", "#8b4a2b"],
+    ["post", "#6e5a48"],
     ["king", "#c8a165"], ["jack", "#c8a165"], ["cripple", "#c8a165"], ["stud", "#c8a165"],
 ];
 function _eqsub(h, n, i) = len([for (j = [0:len(n)-1]) if (h[i+j] != n[j]) 1]) == 0;
@@ -72,6 +76,7 @@ function lumber_dims(size) =
     size == "2x6"  ? [5.5,  1.5 ] :
     size == "2x8"  ? [7.25, 1.5 ] :
     size == "2x10" ? [9.25, 1.5 ] :
+    size == "2x12" ? [11.25, 1.5] :
     size == "4x4"  ? [3.5,  3.5 ] :
     size == "6x6"  ? [5.5,  5.5 ] :
     [3.5, 1.5];   // fallback: unknown sizes are drawn as 2x4 (also warned)
@@ -79,7 +84,7 @@ function lumber_dims(size) =
 function lumber_known(size) =
     size=="1x2"||size=="1x3"||size=="1x4"||size=="1x6"||size=="1x8"||
     size=="2x2"||size=="2x3"||size=="2x4"||size=="2x6"||size=="2x8"||
-    size=="2x10"||size=="4x4"||size=="6x6";
+    size=="2x10"||size=="2x12"||size=="4x4"||size=="6x6";
 
 // ---- primitives -----------------------------------------------------------
 // board(): the one true primitive. Drawn from the origin with
@@ -99,6 +104,41 @@ module board(size, length, tag="") {
 module sheet(thick, w, h, tag="") {
     echo(str("CUTLIST|sheet|", thick, "in ply|", w, "|", h, "|", thick, "|", tag, "|", _stage_tag()));
     color(_piece_color(PLY_COLOR, tag)) cube([w, h, thick]);
+}
+
+// stringer(): a notched stair stringer cut from one board (2x12 is standard).
+// A plain board() can't draw one — a rectangle pokes through the treads — so
+// this draws the real sawtooth profile and emits one cut-list line for the
+// stock it is cut from. Drawn with the run along +X (bottom of the stair at
+// x=0, rising toward +X), rise along +Z, thickness along +Y.
+//   risers : number of risers (the top one lands on the deck/floor)
+//   rise   : height of each riser;  run : depth of each tread seat
+//   tt     : tread thickness — seats are cut this far below each step height,
+//            and the top plumb cut sits this far below the landing surface
+// Treads are not included: place them with plate() on the seats, the top of
+// tread i (1..risers-1) at z = i*rise over x in [(i-1)*run, i*run].
+function stringer_seat_z(i, rise, tt) = i * rise - tt;
+module stringer(size, risers, rise, run, tt = 1.5, tag = "stair stringer") {
+    d = lumber_dims(size); w = d[0]; t = d[1];
+    if (!lumber_known(size)) echo(str("WARNING|unknown lumber size '", size, "' drawn as 2x4"));
+    n = risers;
+    th = atan(rise / run);
+    h1 = stringer_seat_z(1, rise, tt);
+    drop = w / cos(th);                         // vertical depth of the board
+    xg = max(0, (drop - h1) * run / rise);      // where the bottom edge meets grade
+    xt = (n - 1) * run;                         // top plumb cut (against the rim)
+    zb = h1 + xt * rise / run - drop;           // bottom edge at the plumb cut
+    teeth = [for (i = [1 : n - 1]) each [[(i - 1) * run, stringer_seat_z(i, rise, tt)],
+                                         [i * run,       stringer_seat_z(i, rise, tt)]]];
+    pts = concat([[xg, 0], [0, 0]], teeth,
+                 [[xt, stringer_seat_z(n, rise, tt)], [xt, max(zb, 0)]]);
+    // stock length = the profile's extent along the slope
+    u = [cos(th), sin(th)];
+    proj = [for (p = pts) p * u];
+    len_in = ceil(max(proj) - min(proj));
+    echo(str("CUTLIST|lumber|", size, "|", len_in, "|", w, "|", t, "|", tag, "|", _stage_tag()));
+    color(_piece_color(WOOD_COLOR, tag))
+        translate([0, t, 0]) rotate([90, 0, 0]) linear_extrude(t) polygon(pts);
 }
 
 // ---- oriented framing helpers --------------------------------------------

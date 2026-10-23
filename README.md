@@ -65,6 +65,49 @@ printf '# Hello\n\n```mermaid\nflowchart LR; A-->B\n```\n' > /tmp/hello.md
 md2pdf /tmp/hello.md --open
 ```
 
+## Wiring it into Claude Code
+
+[`CLAUDE.md`](CLAUDE.md) in this repo holds the rules a Claude session should follow when it writes
+an illustrative document: read `AUTHORING.md` first, render with `md2pdf` rather than `md-to-pdf`,
+and verify the PDF instead of trusting the exit code. Those rules live here, next to the tool, so
+they stay true to what the tool does.
+
+To apply them in every project, import this file from your user-level rules at
+`~/.claude/CLAUDE.md`. Claude Code expands `@path` imports, accepts `~`, and loads imports in
+user-scope files without an approval prompt.
+
+This is idempotent — it appends only when the import is missing, so it is safe to re-run and safe
+to put in a dotfiles bootstrap:
+
+```sh
+RULES="$HOME/.claude/CLAUDE.md"
+LINE="@~/scripts/md2pdf/CLAUDE.md"
+
+mkdir -p "$(dirname "$RULES")"
+grep -qF "$LINE" "$RULES" 2>/dev/null \
+  || printf '\n## Illustrative documents\n\n%s\n' "$LINE" >> "$RULES"
+```
+
+Check it landed:
+
+```sh
+grep -n 'md2pdf' ~/.claude/CLAUDE.md
+```
+
+**Know what the import costs, because it is not free.** An imported file is loaded alongside the
+file that imports it, in every session and every project — Claude Code's own guidance is that
+imports organise a long file rather than reduce its context cost. This repo's `CLAUDE.md` is about
+65 lines, so that is what you are adding to every session.
+
+The cheaper alternative is a short pointer in your user-level rules that names this repo and tells
+Claude to read `AUTHORING.md` before authoring, leaving the 181-line guide to be read on demand.
+Roughly 17 lines instead of 65, at the cost of the rendering and verification rules not being
+present until something goes looking for them. Pick the import when you author documents most
+days, the pointer when you do it occasionally.
+
+Either way, keep one copy. Rules pasted into a user-level file drift from the tool they describe,
+and the copy that ships with the tool is the one that stays correct.
+
 ## Usage
 
 ```sh

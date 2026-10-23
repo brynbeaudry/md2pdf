@@ -17,6 +17,32 @@ Everything here describes what the renderer actually does. When the tool changes
 - **Attribute derived content** with a source blockquote under the heading: `> *Source: path/to/file.md §3.2*`.
 - **Close long documents** with a glossary and/or a status table.
 - **Spell out acronyms** on first use. Keep product names as-is.
+- **Define every non-obvious term where the reader first meets it** — [§1.1](#11-define-a-term-where-the-reader-meets-it).
+
+### 1.1 Define a term where the reader meets it
+
+A glossary is a reference, not a substitute for the prose. A reader who has to stop, jump to the end, find a row and come back has been interrupted, and in a PDF that costs more than it does on a web page, because there is no back button. **First use carries the definition. The glossary is for the second use and the twentieth.**
+
+This covers anything a reader of the document cannot be assumed to know:
+
+| Kind | Examples |
+|---|---|
+| Technical term or software concept | idempotency key, bounded read, at-least-once delivery |
+| Storage and data objects | a catalog, schema, table, volume, external location |
+| Infrastructure | a workspace, namespace, cluster, subscription, resource group |
+| Code entities | a module, class, function, entry point, flag, variable |
+| Internal identifiers | a ticket, branch, pipeline, job or environment name |
+| Acronyms | expand on first use, every time |
+
+Three ways to carry a definition, in order of preference:
+
+- **An appositive clause.** It costs a few words and nothing in flow: "the `landing` volume, a governed pointer at a path inside a storage container, is created by the deploy."
+- **A definition table at the head of the section**, when several terms arrive together and inlining them all would bury the argument. Put it **before** the prose that uses them, never after.
+- **A link to the glossary**, `[consumer group](#glossary)`, and only for a term that is genuinely peripheral where it appears. Use this least.
+
+**There is no per-row glossary anchor, so do not imply one.** The renderer emits `<a id="…">` for `##` and `###` headings only, and raw HTML in the body is unavailable to hand-write one ([§5](#5-compatibility)). A link can reach the glossary section, not a row inside it. A term that needs pinpointing needs defining in place instead.
+
+**Order the document so definitions precede use.** If a section cannot be read without a term introduced three sections later, that is a structural problem rather than a glossary problem. Move the definition forward, or move the section. The general-to-specific ordering above usually does this for free: the summary section is where the vocabulary belongs.
 
 ## 2. Diagrams
 

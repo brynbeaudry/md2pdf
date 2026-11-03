@@ -6,7 +6,7 @@ project, not only in this repo. A user-level `~/.claude/CLAUDE.md` imports this 
 
 ## Authoring
 
-- **Follow `~/scripts/md2pdf/AUTHORING.md`** (this repo's [`AUTHORING.md`](AUTHORING.md)) for structure, diagrams, 3D models, tables
+- **Follow `~/repos/md2pdf/AUTHORING.md`** (this repo's [`AUTHORING.md`](AUTHORING.md)) for structure, diagrams, 3D models, tables
   and deck layout. It describes what the renderer actually does; treat it as the
   contract, not a style preference. Read it before writing the first document of a
   session.
@@ -43,9 +43,9 @@ sawhorse, shelf, lean-to — anything made from lumber and sheet goods), produce
 LEGO-style PDF build plan with this repo's `cad/` pipeline rather than writing a
 document by hand:
 
-- **Read `~/scripts/md2pdf/cad/README.md` first** — its "Agent runbook" is the
+- **Read `~/repos/md2pdf/cad/README.md` first** — its "Agent runbook" is the
   canonical procedure and its API section is the modelling contract.
-- Work inside `~/scripts/md2pdf/cad/`: copy `templates/SKELETON.scad` to
+- Work inside `~/repos/md2pdf/cad/`: copy `templates/SKELETON.scad` to
   `projects/<kebab-name>/<kebab-name>.scad`, fill in the `TODO`s, and use
   `projects/outhouse-deluxe/outhouse-deluxe.scad` as the full reference.
 - One physical piece = one `board()`/`sheet()` call; the cut list and cost come

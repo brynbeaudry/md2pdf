@@ -24,7 +24,7 @@ prompt ──▶ projects/<name>/<name>.scad ──▶ cad-render ──▶ out/
 ## Quick start
 
 ```bash
-cd ~/scripts/md2pdf/cad
+cd ~/repos/md2pdf/cad
 bin/cad-build projects/outhouse --open      # render + build PDF, then open it
 ```
 
@@ -34,7 +34,7 @@ To change the build, edit the parameters at the top of
 `projects/outhouse/outhouse.scad` (or ask the agent to) and re-run `cad-build`.
 
 > Tip: add the tools to your PATH so you can run them anywhere:
-> `export PATH="$HOME/scripts/md2pdf/cad/bin:$PATH"` (in `~/.zshrc`).
+> `export PATH="$HOME/repos/md2pdf/cad/bin:$PATH"` (in `~/.zshrc`).
 
 ### Requirements
 

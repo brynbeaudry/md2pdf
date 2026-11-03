@@ -42,7 +42,7 @@ Windows, run under WSL.
 The quickest way — `./install.sh` from this folder:
 
 ```sh
-cd ~/scripts/md2pdf
+cd ~/repos/md2pdf
 ./install.sh                       # copies md2pdf to ~/.local/bin and reports missing deps
 ./install.sh /usr/local/bin        # or pick your own PATH dir
 ```
@@ -81,7 +81,7 @@ to put in a dotfiles bootstrap:
 
 ```sh
 RULES="$HOME/.claude/CLAUDE.md"
-LINE="@~/scripts/md2pdf/CLAUDE.md"
+LINE="@~/repos/md2pdf/CLAUDE.md"
 
 mkdir -p "$(dirname "$RULES")"
 grep -qF "$LINE" "$RULES" 2>/dev/null \
@@ -262,7 +262,7 @@ unzip -o ../<ver>-chrome-headless-shell-*.zip   # extract into place
 ## Layout
 
 ```
-scripts/md2pdf/
+md2pdf/
 ├── md2pdf          # the script (executable)
 ├── install.sh      # copies md2pdf to a PATH dir + reports missing deps
 ├── AUTHORING.md    # how to write a document or deck for this renderer

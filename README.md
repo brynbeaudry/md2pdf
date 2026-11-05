@@ -129,10 +129,17 @@ renderer generates versus expects you to author.
 
 `--present` renders 13.333 x 7.5in landscape, one slide per `##`, with larger type and a capped
 diagram height so a diagram and the prose interpreting it stay on the same slide. It opens with a
-title card (the H1 and its framing paragraph) followed by a generated two-column agenda card. To
-write your own agenda instead, give the document a `##` section headed `Overview`, `Agenda`,
-`Contents`, `In this deck`, `On the agenda`, `What's covered`, or `How to read` — the renderer
-detects it and injects nothing. `--dark` composes with it.
+title card (the H1 and its framing paragraph, set on a full-slide gradient card) followed by a
+generated two-column agenda card. To write your own agenda instead, give the document a `##` section
+headed `Overview`, `Agenda`, `Contents`, `In this deck`, `On the agenda`, `What's covered`, or
+`How to read` — the renderer detects it and injects nothing. `--dark` composes with it.
+
+The preprocessor wraps the title card in a `div.title-card` and each `##` section in a
+`section.slide`. Before printing, a script injected through md-to-pdf's `--config-file` measures
+every slide at the print width and marks the ones that fit one page. Those are laid out with the
+heading at the top and the body centred beneath it. A slide that runs over stays in plain block
+flow, because a flex column splits across pages differently and would add pages. Light decks also
+render Mermaid with a slate `base` palette in place of the default lavender and yellow.
 
 ### 3D models
 

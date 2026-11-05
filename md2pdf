@@ -288,12 +288,100 @@ body {
   line-height: 1.5;
   padding: 0;
 }
-h1 { font-size: 2.6em; border-bottom: none; }
-h2 {
-  font-size: 1.9em;
+
+/* The usable page box: 7.5in less the 12mm top and bottom margins, less a hair
+   so a full-height slide never overflows onto a blank page. */
+:root { --slide-h: 164mm; --accent: #0e7490; --accent-2: #38bdf8; }
+
+/* ── title card: the H1 and its framing paragraph, wrapped by the preprocessor ── */
+.title-card {
+  box-sizing: border-box;
+  height: var(--slide-h);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 0 22mm;
+  border-radius: 18px;
+  color: #f8fafc;
+  background:
+    radial-gradient(circle at 85% 20%, rgba(56, 189, 248, 0.35), transparent 45%),
+    radial-gradient(circle at 10% 95%, rgba(14, 116, 144, 0.55), transparent 50%),
+    linear-gradient(135deg, #0b1220 0%, #10213a 55%, #0c3a4a 100%);
+}
+.title-card h1 {
+  font-size: 3.3em;
+  font-weight: 800;
+  line-height: 1.08;
+  letter-spacing: -0.025em;
+  color: #ffffff;
+  border: none;
+  margin: 0 0 0.5em 0;
+  padding: 0;
+  max-width: 24ch;
+  text-wrap: balance;
+}
+.title-card h1::before {
+  content: "";
+  display: block;
+  width: 72px;
+  height: 6px;
+  border-radius: 3px;
+  margin-bottom: 28px;
+  background: linear-gradient(90deg, var(--accent-2), #a78bfa);
+}
+.title-card p {
+  font-size: 1.15em;
+  line-height: 1.55;
+  color: rgba(226, 232, 240, 0.86);
+  max-width: 62ch;
+  margin: 0 0 0.6em 0;
+}
+.title-card code { background: rgba(255, 255, 255, 0.12); color: #e2e8f0; }
+.title-card a { color: var(--accent-2); }
+
+/* ── slides: one H2 section each, wrapped by the preprocessor ──
+   A slide that fits one page (marked .fits by SLIDE_FIT_JS before printing) keeps
+   its heading at the top and centres its body in the space below: auto margins on
+   the heading and on the last child share the free height. A slide that runs over
+   stays in plain block flow, because a flex column fragments across pages
+   differently and would add pages to long sections. */
+.slide {
+  box-sizing: border-box;
   break-before: page;
   page-break-before: always;
+}
+.slide.fits {
+  min-height: var(--slide-h);
+  display: flex;
+  flex-direction: column;
+}
+.slide.fits > h2 { margin-bottom: auto; }
+.slide.fits > :last-child { margin-bottom: auto !important; }
+/* The preprocessor's heading anchors render as an empty paragraph. Keep them as
+   link targets but take them out of the layout. */
+.slide > p:has(> a[id]:only-child) { margin: 0; height: 0; overflow: hidden; }
+
+h1 { font-size: 2.6em; border-bottom: none; }
+h2 {
+  font-size: 1.75em;
+  font-weight: 750;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+  border-bottom: none;
+  padding-bottom: 0;
   margin-top: 0;
+  break-before: page;
+  page-break-before: always;
+}
+.slide > h2 { break-before: auto; page-break-before: auto; }
+h2::after {
+  content: "";
+  display: block;
+  width: 56px;
+  height: 4px;
+  border-radius: 2px;
+  margin-top: 12px;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
 }
 /* Prose gets a readable measure while tables and diagrams keep the full slide
    width — a 13in line of body text is the one thing landscape makes worse. */
@@ -311,27 +399,36 @@ p, ul, ol, blockquote { max-width: 92ch; }
 .agenda li {
   counter-increment: agenda;
   break-inside: avoid;
-  margin: 0 0 10px 0;
-  font-size: 0.92em;
+  margin: 0 0 14px 0;
+  font-size: 0.95em;
   display: flex;
-  gap: 0.7em;
+  align-items: center;
+  gap: 0.8em;
 }
 .agenda li::before {
   content: counter(agenda);
-  flex: 0 0 1.4em;
-  text-align: right;
-  color: #8a94a6;
+  flex: 0 0 1.9em;
+  height: 1.9em;
+  line-height: 1.9em;
+  border-radius: 50%;
+  text-align: center;
+  font-size: 0.8em;
+  font-weight: 700;
+  color: #ffffff;
+  background: var(--accent);
   font-variant-numeric: tabular-nums;
 }
 .agenda a { color: inherit; text-decoration: none; }
 h3 { font-size: 1.35em; }
 h4 { font-size: 1.1em; }
 th, td { font-size: 0.8em; padding: 6px 10px; }
+pre { border-radius: 10px; }
 pre, pre code { font-size: 0.72em; }
 code { font-size: 0.85em; }
 .diagram-container {
   margin: 0;
-  padding: 8px 0;
+  padding: 14px 0;
+  border-radius: 14px;
 }
 /* width/height stay auto so the aspect ratio is never distorted: whichever of
    the two caps binds first decides the size. The height cap has to leave room
@@ -341,13 +438,33 @@ code { font-size: 0.85em; }
   width: auto;
   height: auto;
   max-width: 100%;
-  max-height: 76mm;
+  max-height: 90mm;
 }
-.diagram-container svg { max-height: 76mm; height: auto; }
+.diagram-container svg { max-height: 90mm; height: auto; }
 /* A trailing margin that overflows the page box by a hair makes the next
    forced break land a page late, so every tall slide grows a blank one. */
 body > *:last-child { margin-bottom: 0; }
 p:last-child, ul:last-child, table:last-child { margin-bottom: 0; }
+ENDCSS
+
+# Light-theme colours for decks. Kept apart from PRESENT_CSS so --dark --present
+# keeps the dark theme's own colours for text, tables and diagram frames.
+read -r -d '' PRESENT_LIGHT_CSS << 'ENDCSS' || true
+body { color: #334155; }
+h2, h3, h4 { color: #0f172a; }
+strong { color: #0f172a; }
+.diagram-container {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05), 0 8px 24px rgba(15, 23, 42, 0.06);
+}
+pre { background: #f1f5f9; border: 1px solid #e2e8f0; }
+code { background: #f1f5f9; color: #0f172a; }
+th { background: #f1f5f9; color: #0f172a; }
+th, td { border: none; border-bottom: 1px solid #e2e8f0; }
+tr:nth-child(even) { background: #f8fafc; }
+table { border-top: 2px solid var(--accent); }
+.agenda a { color: #1e293b; }
 ENDCSS
 
 if [[ "$THEME" == "dark" ]]; then
@@ -362,6 +479,7 @@ fi
 
 if [[ "$PRESENT" == true ]]; then
   CSS="$CSS$PRESENT_CSS"
+  [[ "$THEME" == "dark" ]] || CSS="$CSS$PRESENT_LIGHT_CSS"
   # 13.333in x 7.5in is 16:9 widescreen, what Keynote and PowerPoint export.
   # Give the dimensions directly rather than format+landscape: Chrome's landscape
   # flag swaps a *named* format's axes, so setting both rotates back to portrait.
@@ -383,10 +501,20 @@ create_mermaid_config() {
   local wrap=200; [[ "$PRESENT" == true ]] && wrap=340
   local seq_actor_fs=$((fontsize + 0))
   local seq_msg_fs=$((fontsize - 1)); (( seq_msg_fs < 9 )) && seq_msg_fs=9
+  # A light deck uses the base theme with a slate palette instead of the default
+  # lavender nodes and yellow subgraphs. Author classDefs still override per node.
+  local theme="$MERMAID_THEME" palette=""
+  if [[ "$PRESENT" == true && "$MERMAID_THEME" == "default" ]]; then
+    theme="base"
+    palette='"primaryColor": "#f1f5f9", "primaryBorderColor": "#94a3b8", "primaryTextColor": "#0f172a",
+    "secondaryColor": "#e0f2fe", "tertiaryColor": "#f8fafc", "lineColor": "#64748b",
+    "clusterBkg": "#f8fafc", "clusterBorder": "#cbd5e1", "edgeLabelBackground": "#ffffff",'
+  fi
   cat > "$config_file" << ENDJSON
 {
-  "theme": "$MERMAID_THEME",
+  "theme": "$theme",
   "themeVariables": {
+    $palette
     "fontSize": "${fontsize}px",
     "fontFamily": "-apple-system, BlinkMacSystemFont, Segoe UI, Helvetica, Arial, sans-serif"
   },
@@ -507,6 +635,7 @@ inject_toc() {
   local emit_toc="${3:-true}"
   local toc_heading="${4:-Table of Contents}"
   local toc_wrap="${5:-}"
+  local slides="${6:-false}"
 
   # Stage 1: build the TOC body (markdown list) into a temp file.
   local toc_tmp
@@ -546,12 +675,19 @@ inject_toc() {
   fi
 
   # Stage 2: emit the file with anchors and the TOC block injected after H1.
+  # With slides=true (presentation mode) the H1 and its framing paragraph are
+  # wrapped in a title-card div, and every H2 section in a slide section, so the
+  # stylesheet can lay out a card and a slide as units. Each wrapper opens and
+  # closes on its own line with blank lines around it, which is what lets the
+  # markdown inside still render as markdown.
   awk -v toc_file="$toc_tmp" -v emit_toc="$emit_toc" \
-      -v toc_heading="$toc_heading" -v toc_wrap="$toc_wrap" '
+      -v toc_heading="$toc_heading" -v toc_wrap="$toc_wrap" -v slides="$slides" '
     BEGIN {
       in_code = 0
       h1_done = 0
       toc_done = 0
+      title_open = 0
+      slide_open = 0
       while ((getline line < toc_file) > 0) {
         toc_body = toc_body line "\n"
       }
@@ -560,14 +696,18 @@ inject_toc() {
     /^```/ { in_code = !in_code; print; next }
     in_code { print; next }
     /^# / && !h1_done {
+      if (slides == "true") { print "<div class=\"title-card\">"; print ""; title_open = 1 }
       print
       h1_done = 1
       next
     }
     /^## / {
+      if (title_open) { print ""; print "</div>"; print ""; title_open = 0 }
+      if (slide_open) { print ""; print "</section>"; print ""; slide_open = 0 }
       # Emitted before the first real section, not straight after the H1, so the
       # H1 keeps its framing paragraph — which is the whole title card in a deck.
       if (emit_toc == "true" && h1_done && !toc_done) {
+        if (slides == "true") { print "<section class=\"slide\">"; print "" }
         print ""
         print "## " toc_heading
         print ""
@@ -575,12 +715,18 @@ inject_toc() {
         printf "%s", toc_body
         if (toc_wrap != "") { print ""; print "</div>" }
         print ""
+        if (slides == "true") { print "</section>"; print "" }
         toc_done = 1
       }
+      if (slides == "true") { print "<section class=\"slide\">"; print ""; slide_open = 1 }
       text = substr($0, 4)
       print "<a id=\"" slugify(text) "\"></a>"
       print
       next
+    }
+    END {
+      if (title_open) { print ""; print "</div>" }
+      if (slide_open) { print ""; print "</section>" }
     }
     /^### / {
       text = substr($0, 5)
@@ -957,6 +1103,37 @@ ${line}"
 WORK_ROOT="$(mktemp -d /tmp/md2pdf-XXXXXX)"
 CSS_FILE="$WORK_ROOT/style.css"
 echo "$CSS" > "$CSS_FILE"
+
+# Presentation mode measures each slide before printing and marks the ones that
+# fit a single page, which the stylesheet then centres. The page is laid out for
+# screen at this point, so the body is set to the print content width
+# (13.333in less 2 x 14mm) while measuring. If the script fails, no slide is
+# marked and every slide prints in plain block flow, as it did before.
+MD_TO_PDF_CONFIG=()
+if [[ "$PRESENT" == true ]]; then
+  CONFIG_FILE="$WORK_ROOT/md-to-pdf.config.js"
+  cat > "$CONFIG_FILE" << 'ENDJS'
+module.exports = {
+  script: [{
+    content: `(function () {
+      var body = document.body;
+      var width = body.style.width;
+      body.style.width = "310.6mm";
+      var probe = document.createElement("div");
+      probe.style.height = "164mm";
+      body.appendChild(probe);
+      var limit = probe.getBoundingClientRect().height;
+      body.removeChild(probe);
+      document.querySelectorAll("section.slide").forEach(function (slide) {
+        if (slide.getBoundingClientRect().height <= limit) slide.classList.add("fits");
+      });
+      body.style.width = width;
+    })();`
+  }]
+};
+ENDJS
+  MD_TO_PDF_CONFIG=(--config-file "$CONFIG_FILE")
+fi
 # Also reap an in-flight md-to-pdf, so Ctrl-C doesn't leave a Chromium behind.
 trap '[[ -n "$MD_TO_PDF_PID" ]] && { pkill -P "$MD_TO_PDF_PID" 2>/dev/null; kill "$MD_TO_PDF_PID" 2>/dev/null; }; rm -rf "$WORK_ROOT"' EXIT
 
@@ -1006,9 +1183,9 @@ for FILE in "${FILES[@]}"; do
     # own overview section we use theirs and inject nothing — the generated card
     # is the fallback for when that formatting is absent, not an override.
     if grep -qiE '^## +(overview|agenda|contents|in this deck|on the agenda|what.s covered|how to read)' "$FILE"; then
-      inject_toc "$FILE" "$TOCIFIED_MD" false
+      inject_toc "$FILE" "$TOCIFIED_MD" false "" "" true
     else
-      inject_toc "$FILE" "$TOCIFIED_MD" true "Overview" "agenda"
+      inject_toc "$FILE" "$TOCIFIED_MD" true "Overview" "agenda" true
     fi
   else
     inject_toc "$FILE" "$TOCIFIED_MD"
@@ -1046,6 +1223,7 @@ for FILE in "${FILES[@]}"; do
     --basedir "$FILE_WORK" \
     --stylesheet "$CSS_FILE" \
     --highlight-style github \
+    ${MD_TO_PDF_CONFIG[@]+"${MD_TO_PDF_CONFIG[@]}"} \
     --pdf-options "$PDF_OPTIONS"; then
 
     # Move to final destination

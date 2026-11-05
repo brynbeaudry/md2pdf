@@ -124,7 +124,7 @@ When the subject is a physical object — a part, an enclosure, a build — show
 - **Keep the model next to the document.** Large models belong in a `.scad` file referenced with `file=models/x.scad`; meshes from elsewhere with `file=part.stl`. Inline source is for small illustrative shapes. `use`/`include` and relative `import()` paths resolve against the document's folder.
 - **Show variants with `define=`** rather than copying the model: `file=box.scad define=W=40` next to `define=W=60` is the 3D equivalent of §2.6 — same model, one parameter changed.
 - **Put the dimensions in the prose or a table beneath it.** A render shows proportion, not measurement.
-- **One model per section**, the same rule as diagrams. On a slide a single view is capped at 76mm high; three views side by side read better than one large one.
+- **One model per section**, the same rule as diagrams. On a slide a single view is capped at 90mm high; three views side by side read better than one large one.
 
 ## 3. Tables and prose
 
@@ -145,7 +145,7 @@ A deck is 13.333 × 7.5in landscape. **One slide per `##`.** `###` does not brea
 
 The intended opening is **title card, then overview card, then sections**.
 
-- **Title card** — the H1 plus its framing paragraph. Nothing else. Keep the paragraph to two or three lines.
+- **Title card** — the H1 plus its framing paragraph. Nothing else. Keep the paragraph to two or three lines. It renders as a full-slide dark card with the title set large, so keep the H1 short. A hyphen is a line-break point, so write a hyphenated word that must stay whole with non-breaking hyphens (U+2011): `ticket‑development`.
 - **Overview card** — generated for you from the `##` headings, under the heading `Overview`, rendered as a numbered two-column agenda.
 - **To write your own instead**, add a second-level section whose heading starts with one of: `Overview`, `Agenda`, `Contents`, `In this deck`, `On the agenda`, `What's covered`, `How to read`. The renderer detects it and injects nothing. Anchors are still emitted, so your links work.
 
@@ -161,8 +161,10 @@ The usable slide box is about 166mm tall after margins. A heading takes roughly 
 | Table | 8-9 rows plus a lead-in and a closing line |
 | Prose only | three or four short paragraphs, or ~8 bullets |
 
-- **Diagrams are capped at 76mm high** so the prose beneath them stays on the same slide. A diagram alone will therefore not fill the slide, which is correct — the prose is the point.
-- **Overflow is silent.** A slide that is one line too long puts that line on a page of its own. Check the page count against the `##` count: they should differ by exactly one, the title card.
+- **Diagrams are capped at 90mm high** so the prose beneath them stays on the same slide. A diagram alone will therefore not fill the slide, which is correct — the prose is the point.
+- **A slide that fits is centred.** Its heading stays at the top and its body is centred vertically in the space below, so a short slide no longer leaves the bottom half empty. A slide that runs over a page is laid out as plain flow instead, which is the cue that it needs cutting.
+- **Light decks restyle Mermaid** with a neutral slate palette: plain nodes are slate rather than lavender and subgraphs are pale grey rather than yellow. `classDef` colours still apply per node, so colour-by-meaning is unchanged.
+- **Overflow is silent.** A slide that is one line too long puts that line on a page of its own. Check the page count against the `##` count: they should differ by exactly two, the title card and the generated overview, or by one when you wrote your own overview section.
 - **Trailing content can overflow the page box by a hair** and push the next forced break a page late, producing a fully blank slide. If you see blanks, the previous slide is marginally too full — cut a line.
 
 ### 4.3 Language
@@ -176,6 +178,6 @@ Plain and concrete. A deck is read at a glance and often from a distance.
 ## 5. Compatibility
 
 - **GitHub-flavoured Markdown only.** Mermaid in ` ```mermaid ` fences, other code fenced with a language tag.
-- **No raw HTML in the body.** Keep HTML (`<br/>`, `<b>`) inside Mermaid labels, where it renders. The exceptions are what the renderer injects itself: the `<div class="agenda">` and the `.diagram-container` blocks for diagrams and 3D views.
+- **No raw HTML in the body.** Keep HTML (`<br/>`, `<b>`) inside Mermaid labels, where it renders. The exceptions are what the renderer injects itself: the `<div class="agenda">`, in a deck the `div.title-card` and `section.slide` wrappers, and the `.diagram-container` blocks for diagrams and 3D views.
 - **Self-contained** — no reliance on external CSS or JS.
 - **Themes compose with the output shape**: `--dark` works with `--present`.
